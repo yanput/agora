@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 
-const OPENAI_API_KEY = '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'; // Замените на ваш ключ!
+const OPENAI_API_KEY = ''
 
-// Звездочка из вашего SVG
 const StarIcon = ({ className }) => (
   <svg
     className={className}
