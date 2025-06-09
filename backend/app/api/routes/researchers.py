@@ -1,35 +1,12 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends
 from uuid import UUID
 from typing import Optional
+from sqlalchemy.orm import Session
+from sqlalchemy import asc, desc
+from app.database.session import get_db
+from app.database.models import Researcher
 
 router = APIRouter()
-
-MOCK_RESEARCHERS = [
-    {
-        "id": "98eebf32-6d0c-4c77-b110-56fc356fbeaf",
-        "orcid_id": "0000-0002-1825-0097",
-        "first_name": "Patryk",
-        "last_name": "Żywica",
-        "full_name": "prof. hab. Patryk Żywica",
-        "photo_url": "https://angora.app/media/photos/patryk_zywica.jpg",
-        "country": "Polska",
-        "current_affiliation": "Uniwersytet im. Adama Mickiewicza w Poznaniu",
-        "degree": "prof. hab.",
-        "field": "Informatyka",
-    },
-    {
-        "id": "11111111-1111-1111-1111-111111111111",
-        "orcid_id": "0000-0001-1234-5678",
-        "first_name": "Anna",
-        "last_name": "Kowalska",
-        "full_name": "dr Anna Kowalska",
-        "photo_url": "https://angora.app/media/photos/anna_kowalska.jpg",
-        "country": "Polska",
-        "current_affiliation": "Politechnika Warszawska",
-        "degree": "dr",
-        "field": "Biotechnologia",
-    }
-]
 
 @router.get("/")
 def get_researchers(
@@ -37,34 +14,57 @@ def get_researchers(
     orcid: Optional[str] = Query(None),
     institution: Optional[str] = Query(None),
     discipline: Optional[str] = Query(None),
+    sort: str = Query("full_name_asc"),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_db),
 ):
-    
-    filtered = MOCK_RESEARCHERS
+    query = db.query(Researcher)
 
     if name:
-        filtered = [r for r in filtered if name.lower() in r["full_name"].lower()]
+        query = query.filter(Researcher.full_name.ilike(f"%{name}%"))
     if orcid:
-        filtered = [r for r in filtered if orcid in r["orcid_id"]]
+        query = query.filter(Researcher.orcid_id == orcid)
     if institution:
-        filtered = [r for r in filtered if institution.lower() in r["current_affiliation"].lower()]
+        query = query.filter(Researcher.current_affiliation.ilike(f"%{institution}%"))
     if discipline:
-        filtered = [r for r in filtered if discipline.lower() in r["field"].lower()]
+        query = query.filter(Researcher.field.ilike(f"%{discipline}%"))
 
-    start = (page - 1) * limit
-    end = start + limit
+    valid_sort_fields = {
+        "full_name": Researcher.full_name,
+        "orcid_id": Researcher.orcid_id,
+    }
+    sort_field, _, sort_order = sort.partition("_")
+    sort_column = valid_sort_fields.get(sort_field, Researcher.full_name)
+    order_func = asc if sort_order == "asc" else desc
+    query = query.order_by(order_func(sort_column))
+
+    total = query.count()
+    results = query.offset((page - 1) * limit).limit(limit).all()
+
+    serialized_results = []
+    for r in results:
+        serialized_results.append({
+            "id": r.id,
+            "orcid_id": r.orcid_id,
+            "first_name": r.first_name,
+            "last_name": r.last_name,
+            "full_name": r.full_name,
+            "current_affiliation": r.current_affiliation,
+            "field": r.field,
+            "photo_url": r.photo_url if hasattr(r, "photo_url") else None
+        })
 
     return {
-        "results": filtered[start:end],
-        "total": len(filtered),
+        "results": serialized_results,
+        "total": total,
         "page": page,
         "limit": limit
     }
 
 @router.get("/{researcher_id}")
-def get_researcher_detail(researcher_id: UUID):
-    for r in MOCK_RESEARCHERS:
-        if r["id"] == str(researcher_id):
-            return r
+def get_researcher_detail(researcher_id: UUID, db: Session = Depends(get_db)):
+    researcher = db.query(Researcher).filter(Researcher.id == str(researcher_id)).first()
+    if researcher:
+        return researcher.__dict__
     return {"detail": "Researcher not found"}
