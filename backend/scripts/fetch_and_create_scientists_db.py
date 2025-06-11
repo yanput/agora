@@ -120,11 +120,18 @@ class Institution(Base):
 
 base_dir = Path(__file__).parent.resolve()
 db_path = (base_dir.parent /"app"/ "database"/ "scientists.db").resolve()
+print(f"Using DB path: {db_path}")
+if db_path.exists():
+    print("Old database found. Deleting...")
+    os.remove(db_path)
+else:
+    print("No existing database found.")
 engine = create_engine(f"sqlite:///{db_path}")
 
 Base.metadata.drop_all(engine)
 
 Base.metadata.create_all(engine)
+print("Database schema created.")
 
 # Create connection
 #conn = sqlite3.connect("scientists.db")
@@ -500,7 +507,7 @@ def collect_diverse_orcid_ids(topics, per_topic=10): #per_topic=70_res
     return list(all_ids)
 
 #my_list = collect_diverse_orcid_ids(topics)
-my_list = collect_diverse_orcid_ids(topics, per_topic=1)[:10]
+my_list = collect_diverse_orcid_ids(topics, per_topic=2)[:20]
 
 
 for id, scientist in enumerate(my_list):
