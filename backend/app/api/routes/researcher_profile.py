@@ -1,101 +1,95 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
 from uuid import UUID
+
+from app.database.session import get_db
+from app.database.models import Researcher
+from app.database.models import Email
+from app.database.models import Affiliation
+from app.database.models import Publication
+from app.database.models import PublicationAuthor
 
 router = APIRouter()
 
-# Mock database
-mock_profiles = {
-    UUID("123e4567-e89b-12d3-a456-426614174000"): {
-        "full_name": "prof. hab. Patryk Żywica",
-        "degree": "doktor habilitowany",
-        "photo_url": "https://example.com/photos/zywica.jpg",
-        "current_affiliation": "Uniwersytet im. Adama Mickiewicza w Poznaniu",
-        "field": "Informatyka",
-        "country": "Polska",
-        "orcid_id": "0000-0001-2345-6789",
-        "bio": "Zainteresowania: Sztuczna inteligencja, analiza danych, systemy rekomendacyjne."
-    }
-}
-
-mock_contact = {
-    UUID("123e4567-e89b-12d3-a456-426614174000"): {
-        "email": "patryk.zywica@uam.edu.pl",
-        "phone": "+48 123 456 789",
-        "address": "Wydział Informatyki, UAM, Poznań"
-    }
-}
-
-mock_affiliations = {
-    UUID("123e4567-e89b-12d3-a456-426614174000"): [
-        {
-            "institution": "UAM",
-            "department": "Wydział Informatyki",
-            "role": "Profesor",
-            "country": "Polska",
-            "start_date": "2010-09-01",
-            "end_date": None
-        }
-    ]
-}
-
-mock_degrees = {
-    UUID("123e4567-e89b-12d3-a456-426614174000"): [
-        {
-            "degree": "doktor habilitowany",
-            "field": "Informatyka",
-            "year": 2015
-        }
-    ]
-}
-
-mock_collaborators = {
-    UUID("123e4567-e89b-12d3-a456-426614174000"): [
-        {
-            "collaborator_id": "00000000-0000-0000-0000-000000000001",
-            "name": "Jan Kowalski",
-            "shared_publications": 5
-        }
-    ]
-}
-
-mock_publications = {
-    UUID("123e4567-e89b-12d3-a456-426614174000"): [
-        {
-            "title": "Deep Learning in Bioinformatics",
-            "doi": "10.1000/xyz123",
-            "year": 2022
-        },
-        {
-            "title": "Recommender Systems Overview",
-            "doi": "10.1000/abc456",
-            "year": 2021
-        }
-    ]
-}
-
 @router.get("/{id}")
-def get_profile(id: UUID):
-    return mock_profiles.get(id) or HTTPException(status_code=404, detail="Not found")
+def get_profile(id: UUID, db: Session = Depends(get_db)):
+    researcher = db.query(Researcher).filter(Researcher.id == str(id)).first()
+    if not researcher:
+        raise HTTPException(status_code=404, detail="Researcher not found")
+    return {
+        "full_name": researcher.full_name,
+        "degree": researcher.degree,
+        #"photo_url": researcher.photo_url,
+        "current_affiliation": researcher.current_affiliation,
+        "field": researcher.field,
+        "country": researcher.country,
+        "orcid": f"https://orcid.org/{researcher.orcid_id}"
+    }
 
-@router.get("/{id}/contact")
-def get_contact(id: UUID):
-    return mock_contact.get(id) or HTTPException(status_code=404, detail="Not found")
+@router.get("/contact/{id}")
+def get_contact(id: UUID, db: Session = Depends(get_db)):
+    email = db.query(Email).filter(Email.researcher_id == str(id)).first()
+    if not email:
+        raise HTTPException(status_code=404, detail="Email not found")
+    return {"email": email.email}
 
-@router.get("/{id}/affiliations")
-def get_affiliations(id: UUID):
-    return mock_affiliations.get(id) or HTTPException(status_code=404, detail="Not found")
+@router.get("/research-interests/{id}")
+def get_research_interests(id: UUID, db: Session = Depends(get_db)):
+    researcher = db.query(Researcher).filter(Researcher.id == str(id)).first()
+    if not researcher:
+        raise HTTPException(status_code=404, detail="Researcher not found")
+    return {"description": researcher.bio or ""}
 
-@router.get("/{id}/degrees")
-def get_degrees(id: UUID):
-    return mock_degrees.get(id) or HTTPException(status_code=404, detail="Not found")
+@router.get("/degrees/{id}")
+def get_degrees(id: UUID, db: Session = Depends(get_db)):
+    researcher = db.query(Researcher).filter(Researcher.id == str(id)).first()
+    if not researcher:
+        raise HTTPException(status_code=404, detail="Researcher not found")
+    return [{
+        "title": researcher.degree,
+        "field": researcher.field
+    }]
 
-@router.get("/{id}/collaborators")
-def get_collaborators(id: UUID):
-    return mock_collaborators.get(id) or HTTPException(status_code=404, detail="Not found")
+@router.get("/publications/{id}")
+def get_publications(id: UUID, page: int = 1, limit: int = 5, db: Session = Depends(get_db)):
+    researcher = db.query(Researcher).filter(Researcher.id == str(id)).first()
+    if not researcher:
+        raise HTTPException(status_code=404, detail="Researcher not found")
+    query = (
+        db.query(Publication)
+        .join(Publication.authors)
+        .filter(PublicationAuthor.researcher_id == str(id))
+        .order_by(Publication.year.desc())
+    )
+    total = query.count()
+    publications = query.offset((page - 1) * limit).limit(limit).all()
+    return {
+        "results": [{
+            "title": pub.title,
+            "doi": pub.doi,
+            "year": pub.year
+        } for pub in publications],
+        "total": total,
+        "page": page,
+        "limit": limit
+    }
 
-@router.get("/{id}/publications")
-def get_publications(id: UUID, limit: int = 3):
-    pubs = mock_publications.get(id)
-    if pubs is None:
-        raise HTTPException(status_code=404, detail="Not found")
-    return pubs[:limit]
+@router.get("/research-graph/{id}")
+def get_research_graph(id: UUID):
+    return {
+        "nodes": [
+            {"id": str(id), "type": "researcher", "image_url": "https://example.com/avatar_main.jpg"},
+            {"id": "1", "type": "researcher", "image_url": "https://example.com/avatar1.jpg"},
+            {"id": "2", "type": "researcher", "image_url": "https://example.com/avatar2.jpg"},
+            {"id": "3", "type": "researcher", "image_url": "https://example.com/avatar3.jpg"},
+            {"id": "4", "type": "researcher", "image_url": "https://example.com/avatar4.jpg"},
+            {"id": "5", "type": "researcher", "image_url": "https://example.com/avatar5.jpg"}
+        ],
+        "edges": [
+            {"from": str(id), "to": "1", "weight": 5},
+            {"from": str(id), "to": "2", "weight": 4},
+            {"from": str(id), "to": "3", "weight": 3},
+            {"from": str(id), "to": "4", "weight": 2},
+            {"from": str(id), "to": "5", "weight": 1}
+        ]
+    }

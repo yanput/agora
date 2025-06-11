@@ -42,6 +42,4 @@ COPY ./app /app/app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync
 
-RUN python /app/scripts/fetch_and_create_scientists_db.py
-
-CMD ["fastapi", "run", "--workers", "4", "app/main.py"]
+CMD ["sh", "-c", "python /app/scripts/fetch_and_create_scientists_db.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4"]

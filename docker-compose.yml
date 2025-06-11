@@ -77,6 +77,7 @@ services:
       - ENVIRONMENT=prestart
     
     volumes:
+      - ./backend/scripts:/app/scripts
       - ./backend/app/database:/app/app/database
 
   backend:

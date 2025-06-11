@@ -6,6 +6,8 @@ from sqlalchemy import asc, desc
 from app.database.session import get_db
 from app.database.models import Researcher
 
+import logging
+
 router = APIRouter()
 
 @router.get("/")
@@ -52,7 +54,7 @@ def get_researchers(
             "full_name": r.full_name,
             "current_affiliation": r.current_affiliation,
             "field": r.field,
-            "photo_url": r.photo_url if hasattr(r, "photo_url") else None
+            #"photo_url": None
         })
 
     return {
