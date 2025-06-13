@@ -124,11 +124,12 @@ print(f"Using DB path: {db_path}")
 if db_path.exists():
     print("Old database found. Deleting...")
     os.remove(db_path)
+    sys.stdout.flush()
 else:
     print("No existing database found.")
+    sys.stdout.flush()
+print(f"Resolved DB path in container: {db_path}")
 engine = create_engine(f"sqlite:///{db_path}")
-
-Base.metadata.drop_all(engine)
 
 Base.metadata.create_all(engine)
 print("Database schema created.")
@@ -507,7 +508,7 @@ def collect_diverse_orcid_ids(topics, per_topic=10): #per_topic=70_res
     return list(all_ids)
 
 #my_list = collect_diverse_orcid_ids(topics)
-my_list = collect_diverse_orcid_ids(topics, per_topic=2)[:20]
+my_list = collect_diverse_orcid_ids(topics, per_topic=3)[:30]
 
 
 for id, scientist in enumerate(my_list):
