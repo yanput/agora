@@ -1,47 +1,178 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
+// Типы данных
+interface Message {
+  from: 'user' | 'system';
+  text: string;
+}
+
+interface Researcher {
+  first_name: string;
+  last_name: string;
+  current_affiliation: string | null;
+  field: string | null;
+  country: string | null;
+  orcid_id: string;
+}
+
+interface ContactData {
+  email: string | null;
+}
+
+interface Publication {
+  title: string;
+  doi: string | null;
+  year: string | null;
+}
+
+const countryCodes: { [key: string]: string } = {
+  "SO": "Somalia",
+  "PL": "Polska",
+  "US": "Stany Zjednoczone",
+  "GB": "Wielka Brytania",
+  "IN": "Indie",
+  "PK": "Pakistan",
+  "IR": "Iran",
+};
+
 const ResearcherProfile = () => {
-  const [messages, setMessages] = useState([
+  // Stany
+  const [messages, setMessages] = useState<Message[]>([
     { from: 'system', text: 'Cześć! Zadaj pytanie.' },
   ]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [input, setInput] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [researcher, setResearcher] = useState<Researcher | null>(null);
+  const [contactData, setContactData] = useState<ContactData | null>(null);
+  const [publications, setPublications] = useState<Publication[]>([]);
+  const [orcid, setOrcid] = useState<string>('');
+  const [firstName, setFirstName] = useState<string>('');
+  const [lastName, setLastName] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
 
+  // Funkcja do pobrania danych badacza po ORCID lub imieniu/nazwisku
+  const fetchResearcherData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      let url = '/api/v1/researchers/?';
+
+      if (orcid.trim()) {
+        url += `orcid=${orcid}`;
+      } else {
+        if (firstName.trim() || lastName.trim()) {
+          url += `name=${firstName.trim()} ${lastName.trim()}`;
+        }
+      }
+
+      console.log(`Zapytanie do API: ${url}`);
+      const response = await axios.get(url);
+      console.log('Odpowiedź z API:', response.data);
+
+      if (response.data.results && response.data.results.length > 0) {
+        const researcherData = response.data.results[0];
+        setResearcher({
+          first_name: researcherData.first_name || '',
+          last_name: researcherData.last_name || '',
+          current_affiliation: researcherData.current_affiliation || null,
+          field: researcherData.field || null,
+          country: researcherData.country || null,
+          orcid_id: researcherData.orcid_id || '',
+        });
+        setError(null);
+
+        // Po znalezieniu badacza, pobieramy dane kontaktowe
+        fetchResearcherContactData(researcherData.id);
+        // Pobieramy publikacje badacza
+        fetchResearcherPublications(researcherData.id);
+        // Pobieramy kraj przez ID
+        fetchResearcherCountry(researcherData.id);
+      } else {
+        setError('Dane nie zostały znalezione. Proszę sprawdzić parametry wyszukiwania.');
+        setResearcher(null);
+      }
+    } catch (error) {
+      console.error('Błąd przy pobieraniu danych badacza', error);
+      setError('Wystąpił błąd podczas ładowania danych.');
+      setResearcher(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Funkcja do pobrania danych kontaktowych po ID
+  const fetchResearcherContactData = async (id: string) => {
+    try {
+      const response = await axios.get(`/api/v1/researchers/contact/${id}`);
+      console.log('Dane kontaktowe:', response.data);
+      setContactData(response.data);
+    } catch (error) {
+      console.error('Błąd przy pobieraniu danych kontaktowych', error);
+      setError('Nie udało się pobrać danych kontaktowych badacza.');
+    }
+  };
+
+  // Funkcja do pobrania publikacji po ID
+  const fetchResearcherPublications = async (id: string) => {
+    try {
+      console.log(`Zapytanie o publikacje badacza z ID: ${id}`);
+      const response = await axios.get(`/api/v1/researchers/publications/${id}`);
+      console.log('Publikacje:', response.data);
+
+      if (response.data.results) {
+        setPublications(response.data.results);
+      } else {
+        setPublications([]);
+      }
+    } catch (error) {
+      console.error('Błąd przy pobieraniu publikacji', error);
+      setError('Nie udało się pobrać publikacji badacza.');
+    }
+  };
+
+  // Funkcja do pobrania kraju po ID
+  const fetchResearcherCountry = async (id: string) => {
+    try {
+      console.log(`Zapytanie o kraj badacza z ID: ${id}`);
+      const response = await axios.get(`/api/v1/researchers/${id}`);
+      console.log('Kraj:', response.data.country);
+      setResearcher((prevState) => {
+        if (prevState === null) {
+          return { country: response.data.country, first_name: '', last_name: '', current_affiliation: null, field: null, orcid_id: '' };
+        }
+        return { ...prevState, country: response.data.country };
+      });
+    } catch (error) {
+      console.error('Błąd przy pobieraniu kraju', error);
+      setError('Nie udało się pobrać kraju badacza.');
+    }
+  };
+
+  // Funkcja do wysyłania wiadomości w czacie
   const sendMessage = async () => {
     if (!input.trim()) return;
 
-    const userMessage = { from: 'user', text: input };
+    const userMessage: Message = { from: 'user', text: input };
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setLoading(true);
 
-    try {
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: 'Jesteś pomocnym asystentem.' },
-            ...messages.map((m) => ({
-              role: m.from === 'user' ? 'user' : 'assistant',
-              content: m.text,
-            })),
-            { role: 'user', content: input },
-          ],
-          max_tokens: 500,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${OPENAI_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+    const requestData = {
+      prompt: input,
+      model: 'gpt-4o',
+      temperature: 1,
+      use_web_search: false,
+    };
 
-      const botMessage = {
+    try {
+      const response = await axios.post('http://150.254.78.131:8000/query', requestData, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const botMessage: Message = {
         from: 'system',
-        text: response.data.choices[0].message.content.trim(),
+        text: response.data.response,
       };
 
       setMessages((prev) => [...prev, botMessage]);
@@ -56,19 +187,26 @@ const ResearcherProfile = () => {
     }
   };
 
-  return (
-    <div className="min-h-screen max-w-7xl mx-auto p-3 bg-white font-mono text-gray-900 flex gap-4">
+  // Funkcja do wyszukiwania badacza
+  const handleSearchSubmit = () => {
+    fetchResearcherData();
+  };
 
-      {/* Левая колонка: чат */}
+  // Funkcja do przekształcania kodu kraju na pełną nazwę
+  const getCountryName = (code: string) => {
+    return countryCodes[code] || code || 'Nieznany kraj';
+  };
+
+  return (
+    <div className="min-h-screen max-w-7xl mx-auto p-3 bg-white font-mono text-gray-900 flex">
+      {/* Lewa kolumna: czat */}
       <aside className="w-1/3 bg-gray-50 p-3 rounded-lg flex flex-col">
-        <h2 className="text-lg font-semibold mb-3">Chat</h2>
+        <h2 className="text-lg font-semibold mb-3">Czat</h2>
         <div className="flex-grow overflow-y-auto mb-3 space-y-2 border border-gray-300 rounded p-3 text-sm">
           {messages.map((msg, idx) => (
             <p
               key={idx}
-              className={`p-1 rounded max-w-[80%] ${
-                msg.from === 'user' ? 'bg-blue-100 self-end text-right' : 'bg-gray-200 self-start'
-              }`}
+              className={`p-1 rounded max-w-[80%] ${msg.from === 'user' ? 'bg-blue-100 self-end text-right' : 'bg-gray-200 self-start'}`}
             >
               {msg.text}
             </p>
@@ -95,96 +233,102 @@ const ResearcherProfile = () => {
         </div>
       </aside>
 
-      {/* Правая колонка: профиль */}
-      <main className="flex-1 overflow-y-auto max-h-screen flex flex-col">
-
-        {/* Имя профиля сверху */}
-        <h1 className="text-3xl font-bold mb-6 leading-tight">prof. hab. Patryk Żywica</h1>
-
-        {/* Фото + контактные данные + ORCID ссылка в одной строке */}
-        <div className="flex items-start gap-4 mb-8 text-sm">
-
-          {/* Фото и контактные данные */}
-          <div className="flex gap-3 flex-shrink-0">
-            <img
-              src="/images/patryk-zywica.jpg"
-              alt="prof. hab. Patryk Żywica"
-              className="rounded-full w-36 h-36 object-cover"
+      {/* Prawa kolumna: profil, dane kontaktowe i publikacje */}
+      <main className="w-2/3 flex flex-row gap-6">
+        <section className="flex-1 overflow-y-auto max-h-screen flex flex-col">
+          <div className="mb-4">
+            <label className="block font-bold text-sm mb-2">Wprowadź ORCID</label>
+            <input
+              type="text"
+              value={orcid}
+              onChange={(e) => setOrcid(e.target.value)}
+              className="border border-gray-300 rounded p-1 w-2/4"
+              placeholder="ORCID"
             />
+          </div>
+
+          <div className="mb-4">
+            <label className="block font-bold text-sm mb-2">Imię</label>
+            <input
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className="border border-gray-300 rounded p-1 w-2/4"
+              placeholder="Imię"
+            />
+          </div>
+
+          <div className="mb-4">
+            <label className="block font-bold text-sm mb-2">Nazwisko</label>
+            <input
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              className="border border-gray-300 rounded p-1 w-2/4"
+              placeholder="Nazwisko"
+            />
+          </div>
+
+          <button
+            onClick={handleSearchSubmit}
+            className="mt-2 bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+          >
+            Pobierz dane
+          </button>
+
+          {error && <p className="text-red-600">{error}</p>}
+
+          <h1 className="text-3xl font-bold mb-6 leading-tight">
+            {researcher ? `prof. hab. ${researcher.first_name} ${researcher.last_name}` : 'Ładowanie...'}
+          </h1>
+
+          <div className="flex items-start gap-4 mb-8 text-sm">
             <div className="leading-relaxed space-y-2">
-              <p>🏫 Uniwersytet im. Adama Mickiewicza w Poznaniu</p>
-              <p>💻 Informatyka</p>
-              <p>🌍 Polska</p>
+              <p>{researcher ? `🏫 ${researcher.current_affiliation}` : 'Ładowanie...'}</p>
+              <p>💻 {researcher ? researcher.field || 'Brak danych' : 'Ładowanie...'}</p>
+              <p>🌍 {researcher ? getCountryName(researcher.country || '') : 'Ładowanie...'}</p>
+            </div>
+
+            <div className="ml-auto self-center">
+              <a
+                href={researcher ? `https://orcid.org/${researcher.orcid_id}` : '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-green-600 underline font-semibold text-sm"
+              >
+                Profil ORCID
+              </a>
             </div>
           </div>
+        </section>
 
-          {/* Отдельный блок ORCID справа */}
-          <div className="ml-auto self-center">
-            <a
-              href="https://orcid.org/0000-0003-3542-8982"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-green-600 underline font-semibold text-sm"
-            >
-              ORCID Profile
-            </a>
-          </div>
-        </div>
-
-        {/* Нижняя часть — две колонки */}
-        <div className="flex gap-6 max-w-4xl flex-grow text-sm">
-          {/* Левая колонка — Zainteresowania naukowe */}
-          <section className="w-1/2 pr-4 border-r border-gray-300">
-            <h2 className="font-bold text-xl mb-3">Zainteresowania naukowe</h2>
-            <p className="leading-relaxed">
-              Badania nad automatyzacją i sztuczną inteligencją (SI) w platformach low-code
-              skupiają się na rozwoju technologii, popularyzacji programowania i rozbudowie funkcji
-              predykcyjnych.
+        <section className="w-1/3 flex flex-col gap-6">
+          <section className="bg-gray-50 p-3 rounded-lg">
+            <h2 className="font-bold text-lg mb-2">Kontakt</h2>
+            <p className="leading-relaxed text-sm">
+              📧 {contactData ? contactData.email : 'Ładowanie...'}
+              <br />
+              🏫 {researcher ? researcher.current_affiliation : 'Ładowanie...'}
             </p>
           </section>
 
-          {/* Правая колонка — остальная контактная информация */}
-          <section className="w-1/2 pl-4 space-y-4">
-            <article>
-              <h2 className="font-bold text-xl mb-2">Kontakt</h2>
-              <p>
-                📧 patryk.zywica@amu.edu.pl <br />
-                📞 +48 61 829 xxxx <br />
-                🏫 Uniwersytet im. Adama Mickiewicza w Poznaniu
-              </p>
-            </article>
-
-            <article>
-              <h2 className="font-bold text-xl mb-2">Afiliacje akademickie</h2>
-              <p>
-                Uniwersytet im. Adama Mickiewicza w Poznaniu <br />
-                Wydział: Matematyki i Informatyki <br />
-                Stanowisko: Doktor
-              </p>
-            </article>
-
-            <article>
-              <h2 className="font-bold text-xl mb-2">Stopnie i tytuły</h2>
-              <ul className="list-disc list-inside space-y-1">
-                <li>Doktor habilitowany (2024) - nauk inżynieryjno-technicznych / informatyka</li>
-                <li>Doktor (2016) - nauk matematycznych / informatyka</li>
+          <section className="p-3">
+            <h2 className="font-bold text-lg mb-4">Publikacje</h2>
+            {publications.length > 0 ? (
+              <ul className="space-y-2">
+                {publications.map((pub, idx) => (
+                  <li key={idx} className="bg-gray-100 p-2 rounded-md">
+                    <h3 className="font-semibold text-sm">{pub.title}</h3>
+                    <p className="text-xs">{pub.doi ? pub.doi : 'DOI nie podano'}</p>
+                    <p className="text-xs">{pub.year ? pub.year : 'Rok nie podano'}</p>
+                  </li>
+                ))}
               </ul>
-            </article>
-
-            <article>
-              <h2 className="font-bold text-xl mb-2">Wybrane publikacje</h2>
-              <ul className="list-disc list-inside space-y-1">
-                <li>Implementation of an Artificially Empathetic Robot Swarm (2024) DOI: 1998498</li>
-                <li>Partial Order Based Approach to Preference Assessment (2023) DOI: 1998498</li>
-                <li>Integracja GPT w platformach no-code - podejście praktyczne (2021) DOI: 1998498</li>
-              </ul>
-            </article>
+            ) : (
+              <p className="text-sm">Brak publikacji dla tego badacza.</p>
+            )}
           </section>
-        </div>
-
-        <footer className="text-center text-xs text-gray-400 mt-10">
-          Copyright Angora © 2025
-        </footer>
+        </section>
       </main>
     </div>
   );

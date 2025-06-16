@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 const questions = [
   {
     id: 1,
     icon: '🎓',
-    text: 'W jakich obszarach badawczych specjalizuje się profesor Patryk Żywica?',
+    text: 'Znajdź naukowca po numerze orcid lub imieniu i nazwisku',
     link: '/profile/patryk-zywica',
   },
   {
     id: 2,
     icon: '⚙️',
-    text: 'Jakie są zasady wnioskowania o grant "Nagroda Sector 2.0"?',
-    link: '#',
+    text: 'Pokaż naukowców związane z informatyką"',
+    link: '/grant-sector-2',
   },
   {
     id: 3,
@@ -35,27 +35,10 @@ const LandingPage = () => {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-
-  // Проверка на редирект
-  const checkRedirect = (text: string) => {
-    const lowerText = text.toLowerCase();
-    if (lowerText.includes('patryk żywica') || lowerText.includes('patryk zywica')) {
-      navigate('/profile/patryk-zywica');
-      return true;
-    }
-    return false;
-  };
 
   // Отправка сообщения в чат
   const sendMessage = async () => {
     if (!input.trim()) return;
-
-    // Проверяем, нужно ли делать редирект на страницу профессора
-    if (checkRedirect(input)) {
-      setInput('');
-      return;
-    }
 
     const userMessage = { from: 'user', text: input };
     setMessages((prev) => [...prev, userMessage]);
@@ -64,21 +47,19 @@ const LandingPage = () => {
 
     const requestData = {
       prompt: input,
-      model: 'gpt-4o', // модель, которая используется
+      model: 'gpt-4o',
       temperature: 1,
       use_web_search: false,
     };
 
     try {
-      // Отправка запроса на ваш API
       const response = await axios.post('http://150.254.78.131:8000/query', requestData, {
         headers: { 'Content-Type': 'application/json' },
       });
 
-      // Ответ от API
       const botMessage = {
         from: 'system',
-        text: response.data.response,  // Доступ к ответу от API
+        text: response.data.response,
       };
 
       setMessages((prev) => [...prev, botMessage]);
@@ -146,7 +127,7 @@ const LandingPage = () => {
           {loading && <p className="italic text-gray-500">Piszę...</p>}
         </div>
 
-        {/* Карточки */}
+        {/* Карточки с вопросами */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 justify-items-center">
           {questions.map(({ id, icon, text, link }) => (
             <div
@@ -158,21 +139,16 @@ const LandingPage = () => {
                 <span className="font-mono">{text}</span>
               </div>
 
-              {link.startsWith('/') ? (
-                <Link to={link} className="text-blue-600 text-xs underline">
-                  Zapytaj o tym ✨
-                </Link>
-              ) : (
-                <a href={link} className="text-blue-600 text-xs underline">
-                  Zapytaj o tym ✨
-                </a>
-              )}
+              {/* Переход на другую страницу */}
+              <Link to={link} className="text-blue-600 text-xs underline">
+                Zapytaj o tym ✨
+              </Link>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Футер без лишних элементов */}
+      {/* Футер */}
       <footer className="text-center text-xs text-gray-400 mt-8">
         Copyright Angora © {new Date().getFullYear()}
       </footer>
