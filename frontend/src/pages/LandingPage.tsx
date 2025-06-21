@@ -7,7 +7,7 @@ const questions = [
     id: 1,
     icon: '🎓',
     text: 'Znajdź naukowca po numerze orcid lub imieniu i nazwisku',
-    link: '/profile/patryk-zywica',
+    link: '/profile/0',
   },
   {
     id: 2,

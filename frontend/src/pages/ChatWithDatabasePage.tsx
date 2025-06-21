@@ -11,16 +11,15 @@ const ChatWithDatabasePage = () => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  // Funkcja do ładowania danych naukowców z API
   const fetchScientists = async (pageNumber = 1) => {
     try {
       setLoading(true);
-      const response = await axios.get(`http://localhost:8000/api/v1/researchers?page=${pageNumber}`);
+      const response = await axios.get(`/api/v1/researchers/?page=${pageNumber}`);
       const { results, total, page: currentPage, limit } = response.data;
 
       setScientists(results);
-      setTotalPages(Math.ceil(total / limit)); // Obliczamy łączną liczbę stron
-      setPage(currentPage); // Ustawiamy bieżącą stronę
+      setTotalPages(Math.ceil(total / limit));
+      setPage(currentPage);
     } catch (error) {
       console.error('Błąd podczas ładowania naukowców:', error);
     } finally {
@@ -28,12 +27,10 @@ const ChatWithDatabasePage = () => {
     }
   };
 
-  // Ładowanie danych naukowców przy montowaniu komponentu
   useEffect(() => {
-    fetchScientists(page); // Ładujemy dane naukowców dla bieżącej strony
-  }, [page]); // Każdorazowo, gdy zmienia się strona, ładujemy dane na nowo
+    fetchScientists(page);
+  }, [page]);
 
-  // Funkcja wysyłania wiadomości w czacie
   const sendMessage = async () => {
     if (!input.trim()) return;
 
@@ -50,13 +47,17 @@ const ChatWithDatabasePage = () => {
     };
 
     try {
-      const response = await axios.post('http://150.254.78.131:8000/query', requestData, {
-        headers: { 'Content-Type': 'application/json' },
-      });
+      const response = await axios.post(
+        'http://150.254.78.131:8000/query',
+        requestData,
+        {
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
 
       const botMessage = {
         from: 'system',
-        text: response.data.response,  // Odpowiedź z API
+        text: response.data.response,
       };
 
       setMessages((prev) => [...prev, botMessage]);
@@ -71,10 +72,9 @@ const ChatWithDatabasePage = () => {
     }
   };
 
-  // Funkcja do zmiany strony
   const handlePageChange = (newPage: number) => {
     if (newPage > 0 && newPage <= totalPages) {
-      setPage(newPage); // Zmieniamy aktualną stronę
+      setPage(newPage);
     }
   };
 
@@ -87,7 +87,11 @@ const ChatWithDatabasePage = () => {
           {messages.map((msg, idx) => (
             <p
               key={idx}
-              className={`p-1 rounded max-w-[80%] ${msg.from === 'user' ? 'bg-blue-100 self-end text-right' : 'bg-gray-200 self-start'}`}
+              className={`p-1 rounded max-w-[80%] ${
+                msg.from === 'user'
+                  ? 'bg-blue-100 self-end text-right'
+                  : 'bg-gray-200 self-start'
+              }`}
             >
               {msg.text}
             </p>
@@ -122,19 +126,41 @@ const ChatWithDatabasePage = () => {
             <table className="min-w-full table-auto">
               <thead>
                 <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">ORCID</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Imię i Nazwisko</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Jednostka akademicka</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Dyscyplina</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
+                    ORCID
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
+                    Imię i Nazwisko
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
+                    Jednostka akademicka
+                  </th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
+                    Dyscyplina
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {scientists.map((scientist: any) => (
                   <tr key={scientist.orcid_id}>
-                    <td className="px-6 py-4 text-sm text-gray-800">{scientist.orcid_id}</td>
-                    <td className="px-6 py-4 text-sm text-gray-800">{scientist.full_name}</td>
-                    <td className="px-6 py-4 text-sm text-gray-800">{scientist.current_affiliation || 'Brak'}</td>
-                    <td className="px-6 py-4 text-sm text-gray-800">{scientist.field || 'Brak'}</td>
+                    <td className="px-6 py-4 text-sm text-gray-800">
+  <a 
+    href={`/profile/${scientist.orcid_id}`} 
+    className="text-green-600 underline hover:text-green-800"
+  >
+    {scientist.orcid_id}
+  </a>
+</td>
+
+                    <td className="px-6 py-4 text-sm text-gray-800">
+                      {scientist.full_name}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-800">
+                      {scientist.current_affiliation || 'Brak'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-800">
+                      {scientist.field || 'Brak'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -150,7 +176,9 @@ const ChatWithDatabasePage = () => {
             >
               Poprzednia
             </button>
-            <span className="text-sm text-gray-600">Strona {page} z {totalPages}</span>
+            <span className="text-sm text-gray-600">
+              Strona {page} z {totalPages}
+            </span>
             <button
               onClick={() => handlePageChange(page + 1)}
               className="bg-gray-300 px-4 py-2 text-sm rounded-md"

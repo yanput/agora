@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import axios from 'axios';
 
-// Типы данных
 interface Message {
   from: 'user' | 'system';
   text: string;
@@ -27,17 +27,19 @@ interface Publication {
 }
 
 const countryCodes: { [key: string]: string } = {
-  "SO": "Somalia",
-  "PL": "Polska",
-  "US": "Stany Zjednoczone",
-  "GB": "Wielka Brytania",
-  "IN": "Indie",
-  "PK": "Pakistan",
-  "IR": "Iran",
+  SO: 'Somalia',
+  PL: 'Polska',
+  US: 'Stany Zjednoczone',
+  GB: 'Wielka Brytania',
+  IN: 'Indie',
+  PK: 'Pakistan',
+  IR: 'Iran',
 };
 
 const ResearcherProfile = () => {
-  // Stany
+  const { orcidId } = useParams<{ orcidId: string }>();
+
+
   const [messages, setMessages] = useState<Message[]>([
     { from: 'system', text: 'Cześć! Zadaj pytanie.' },
   ]);
@@ -46,29 +48,37 @@ const ResearcherProfile = () => {
   const [researcher, setResearcher] = useState<Researcher | null>(null);
   const [contactData, setContactData] = useState<ContactData | null>(null);
   const [publications, setPublications] = useState<Publication[]>([]);
-  const [orcid, setOrcid] = useState<string>('');
+  const [orcid, setOrcid] = useState<string>(orcidId || '');
   const [firstName, setFirstName] = useState<string>('');
   const [lastName, setLastName] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
 
-  // Funkcja do pobrania danych badacza po ORCID lub imieniu/nazwisku
-  const fetchResearcherData = async () => {
+  useEffect(() => {
+    if (orcidId) {
+      setOrcid(orcidId);
+      fetchResearcherData(orcidId);
+    }
+  }, [orcidId]);
+
+  const fetchResearcherData = async (orcidToSearch?: string) => {
     try {
       setLoading(true);
       setError(null);
       let url = '/api/v1/researchers/?';
 
-      if (orcid.trim()) {
-        url += `orcid=${orcid}`;
+      if (orcidToSearch) {
+        url += `orcid=${orcidToSearch}`;
+      } else if (orcid.trim()) {
+        url += `orcid=${orcid.trim()}`;
+      } else if (firstName.trim() || lastName.trim()) {
+        url += `name=${firstName.trim()} ${lastName.trim()}`;
       } else {
-        if (firstName.trim() || lastName.trim()) {
-          url += `name=${firstName.trim()} ${lastName.trim()}`;
-        }
+        setError('Wprowadź ORCID lub imię/nazwisko.');
+        setLoading(false);
+        return;
       }
 
-      console.log(`Zapytanie do API: ${url}`);
       const response = await axios.get(url);
-      console.log('Odpowiedź z API:', response.data);
 
       if (response.data.results && response.data.results.length > 0) {
         const researcherData = response.data.results[0];
@@ -82,44 +92,40 @@ const ResearcherProfile = () => {
         });
         setError(null);
 
-        // Po znalezieniu badacza, pobieramy dane kontaktowe
         fetchResearcherContactData(researcherData.id);
-        // Pobieramy publikacje badacza
         fetchResearcherPublications(researcherData.id);
-        // Pobieramy kraj przez ID
         fetchResearcherCountry(researcherData.id);
       } else {
         setError('Dane nie zostały znalezione. Proszę sprawdzić parametry wyszukiwania.');
         setResearcher(null);
+        setContactData(null);
+        setPublications([]);
       }
     } catch (error) {
       console.error('Błąd przy pobieraniu danych badacza', error);
       setError('Wystąpił błąd podczas ładowania danych.');
       setResearcher(null);
+      setContactData(null);
+      setPublications([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Funkcja do pobrania danych kontaktowych po ID
   const fetchResearcherContactData = async (id: string) => {
     try {
       const response = await axios.get(`/api/v1/researchers/contact/${id}`);
-      console.log('Dane kontaktowe:', response.data);
       setContactData(response.data);
     } catch (error) {
       console.error('Błąd przy pobieraniu danych kontaktowych', error);
       setError('Nie udało się pobrać danych kontaktowych badacza.');
+      setContactData(null);
     }
   };
 
-  // Funkcja do pobrania publikacji po ID
   const fetchResearcherPublications = async (id: string) => {
     try {
-      console.log(`Zapytanie o publikacje badacza z ID: ${id}`);
       const response = await axios.get(`/api/v1/researchers/publications/${id}`);
-      console.log('Publikacje:', response.data);
-
       if (response.data.results) {
         setPublications(response.data.results);
       } else {
@@ -128,28 +134,22 @@ const ResearcherProfile = () => {
     } catch (error) {
       console.error('Błąd przy pobieraniu publikacji', error);
       setError('Nie udało się pobrać publikacji badacza.');
+      setPublications([]);
     }
   };
 
-  // Funkcja do pobrania kraju po ID
   const fetchResearcherCountry = async (id: string) => {
     try {
-      console.log(`Zapytanie o kraj badacza z ID: ${id}`);
       const response = await axios.get(`/api/v1/researchers/${id}`);
-      console.log('Kraj:', response.data.country);
-      setResearcher((prevState) => {
-        if (prevState === null) {
-          return { country: response.data.country, first_name: '', last_name: '', current_affiliation: null, field: null, orcid_id: '' };
-        }
-        return { ...prevState, country: response.data.country };
-      });
+      setResearcher((prevState) =>
+        prevState ? { ...prevState, country: response.data.country } : prevState
+      );
     } catch (error) {
       console.error('Błąd przy pobieraniu kraju', error);
       setError('Nie udało się pobrać kraju badacza.');
     }
   };
 
-  // Funkcja do wysyłania wiadomości w czacie
   const sendMessage = async () => {
     if (!input.trim()) return;
 
@@ -187,26 +187,28 @@ const ResearcherProfile = () => {
     }
   };
 
-  // Funkcja do wyszukiwania badacza
+  // Обработка поиска по кнопке
   const handleSearchSubmit = () => {
     fetchResearcherData();
   };
 
-  // Funkcja do przekształcania kodu kraju na pełną nazwę
+  // Код страны в имя
   const getCountryName = (code: string) => {
     return countryCodes[code] || code || 'Nieznany kraj';
   };
 
   return (
     <div className="min-h-screen max-w-7xl mx-auto p-3 bg-white font-mono text-gray-900 flex">
-      {/* Lewa kolumna: czat */}
+      {/* Левый столбец: чат */}
       <aside className="w-1/3 bg-gray-50 p-3 rounded-lg flex flex-col">
         <h2 className="text-lg font-semibold mb-3">Czat</h2>
         <div className="flex-grow overflow-y-auto mb-3 space-y-2 border border-gray-300 rounded p-3 text-sm">
           {messages.map((msg, idx) => (
             <p
               key={idx}
-              className={`p-1 rounded max-w-[80%] ${msg.from === 'user' ? 'bg-blue-100 self-end text-right' : 'bg-gray-200 self-start'}`}
+              className={`p-1 rounded max-w-[80%] ${
+                msg.from === 'user' ? 'bg-blue-100 self-end text-right' : 'bg-gray-200 self-start'
+              }`}
             >
               {msg.text}
             </p>
@@ -233,7 +235,7 @@ const ResearcherProfile = () => {
         </div>
       </aside>
 
-      {/* Prawa kolumna: profil, dane kontaktowe i publikacje */}
+      {/* Правый столбец: профиль, контактные данные и публикации */}
       <main className="w-2/3 flex flex-row gap-6">
         <section className="flex-1 overflow-y-auto max-h-screen flex flex-col">
           <div className="mb-4">
@@ -279,7 +281,9 @@ const ResearcherProfile = () => {
           {error && <p className="text-red-600">{error}</p>}
 
           <h1 className="text-3xl font-bold mb-6 leading-tight">
-            {researcher ? `prof. hab. ${researcher.first_name} ${researcher.last_name}` : 'Ładowanie...'}
+            {researcher
+              ? `prof. hab. ${researcher.first_name} ${researcher.last_name}`
+              : 'Ładowanie...'}
           </h1>
 
           <div className="flex items-start gap-4 mb-8 text-sm">
