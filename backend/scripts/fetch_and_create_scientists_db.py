@@ -463,8 +463,21 @@ def collect_data(orcid_id: str) -> None:
     publications = fetch_orcid_works(orcid_id)
     
     parsed = parse_orcid_json(orcid_id, person, employment, education)
+    
+    if not parsed or not parsed.get("researcher"):
+        return  # Нет данных, ничего не делаем
+    
+    country = parsed["researcher"].get("country")
+    if country is None:
+        return  # Нет страны — пропускаем
+    
+    country_lower = country.lower()
+    if country_lower not in ["pl", "poland"]:
+        return  # Не Польша — пропускаем
+
     parsed_publications = parse_orcid_works(publications, parsed["researcher"]["id"])
     insert_data(parsed, parsed_publications)
+
 
 
 def get_orcid_ids_by_query(query: str, count: int = 100):
@@ -481,6 +494,12 @@ def get_orcid_ids_by_query(query: str, count: int = 100):
         rows.extend([res["orcid-id"] for res in results])
         start += 100
     return rows[:count]
+
+def get_orcid_ids_poland(count=100):
+    # Формируем запрос с фильтром по тексту "Poland"
+    query = "text:Poland"
+    return get_orcid_ids_by_query(query, count=count)
+
 
 topics = [                                                              
     "artificial intelligence",
@@ -508,7 +527,8 @@ def collect_diverse_orcid_ids(topics, per_topic=10): #per_topic=70_res
     return list(all_ids)
 
 #my_list = collect_diverse_orcid_ids(topics)
-my_list = collect_diverse_orcid_ids(topics, per_topic=3)[:30]
+my_list = get_orcid_ids_poland(count=50)
+
 
 
 for id, scientist in enumerate(my_list):
