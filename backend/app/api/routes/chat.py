@@ -49,6 +49,8 @@ async def chat_with_ai(data: ChatRequest):
                 or "wróć do jadwiga ziaja" in message_text
                 or "wróć" in message_text
                 or "wroć" in message_text
+                or "wroс" in message_text
+                or "wróс" in message_text
             ):
                 return {
                     "response": "Powracam do profilu naukowczyni Jadwiga Ziaja.",
