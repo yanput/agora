@@ -122,12 +122,10 @@ base_dir = Path(__file__).parent.resolve()
 db_path = (base_dir.parent /"app"/ "database"/ "scientists.db").resolve()
 print(f"Using DB path: {db_path}")
 if db_path.exists():
-    print("Old database found. Deleting...")
-    os.remove(db_path)
-    sys.stdout.flush()
+    print("Database already exists. Skipping creation.")
+    sys.exit(0)
 else:
-    print("No existing database found.")
-    sys.stdout.flush()
+    print("No existing database found. Creating new one.")
 print(f"Resolved DB path in container: {db_path}")
 engine = create_engine(f"sqlite:///{db_path}")
 
