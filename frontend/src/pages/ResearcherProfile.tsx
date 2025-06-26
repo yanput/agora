@@ -18,6 +18,7 @@ interface Researcher {
 
 interface ContactData {
   email: string | null;
+  country?: string | null;
 }
 
 interface Publication {
@@ -35,12 +36,12 @@ const countryCodes: { [key: string]: string } = {
   PK: 'Pakistan',
   IR: 'Iran',
 };
-// Маппинг UUID -> ORCID
+
 const uuidToOrcidMap: Record<string, string> = {
-  "fae79996-25d0-4219-83e5-a706e9f97381": "0000-0003-4451-2051",      // Dariusz Krzyszkowski
-  "1896e673-c3ac-4eac-9714-813a590e1718": "0000-0001-8228-2774",      // Grzegorz Sadlok
-  "88025787-92b6-4d68-bbf4-588a7c076644": "0000-0002-3562-4812",      // Jadwiga Ziaja
-  "df145a3f-4be4-4b59-a783-bd0bc5044b42": "0000-0002-2916-9905",      // Grzegorz Worobiec
+  "fae79996-25d0-4219-83e5-a706e9f97381": "0000-0003-4451-2051",
+  "1896e673-c3ac-4eac-9714-813a590e1718": "0000-0001-8228-2774",
+  "88025787-92b6-4d68-bbf4-588a7c076644": "0000-0002-3562-4812",
+  "df145a3f-4be4-4b59-a783-bd0bc5044b42": "0000-0002-2916-9905",
 };
 
 const convertIdToOrcid = (id: string) => {
@@ -65,6 +66,7 @@ const ResearcherProfile = () => {
   const [error, setError] = useState<string | null>(null);
   const [filteredIDs, setFilteredIDs] = useState<string[] | null>(null);
   const [scientists, setScientists] = useState<any[]>([]);
+  const [history, setHistory] = useState<string[]>([]);
   const page = 1;
 
   useEffect(() => {
@@ -82,7 +84,6 @@ const ResearcherProfile = () => {
 
       let orcidForSearch = orcidToSearch || orcid.trim();
 
-      // Конвертируем UUID в ORCID, если нужно
       orcidForSearch = convertIdToOrcid(orcidForSearch);
 
       if (orcidForSearch) {
@@ -162,99 +163,165 @@ const ResearcherProfile = () => {
   };
 
   const sendMessage = async () => {
-    if (!input.trim()) return;
+  if (!input.trim()) return;
 
-    const trimmed = input.trim();
-    setMessages((prev) => [...prev, { from: 'user', text: trimmed }]);
-    setInput('');
-    setLoading(true);
+  const trimmed = input.trim();
+  setMessages((prev) => [...prev, { from: 'user', text: trimmed }]);
+  setInput('');
+  setLoading(true);
 
-    const lower = trimmed.toLowerCase();
+  const lower = trimmed.toLowerCase();
 
-    try {
-      if (lower === 'pokaż naukowców z instytutu botaniki im. w. szafera pan') {
-        const listMsg = {
-          from: 'system',
-          text: '🔁 Przekierowuję do listy naukowców z Instytutu Botaniki...',
-        };
-        setMessages((prev) => [...prev, listMsg]);
-
-        const specialScientists = [
-          {
-            id: '88025787-92b6-4d68-bbf4-588a7c076644',
-            orcid_id: '0000-0002-3562-4812',
-            full_name: 'Jadwiga Ziaja',
-            current_affiliation: 'Instytut Botaniki im. W. Szafera PAN',
-            field: 'Botanika',
-          },
-          {
-            id: 'df145a3f-4be4-4b59-a783-bd0bc5044d42',
-            orcid_id: '0000-0002-2916-9905',
-            full_name: 'Grzegorz Worobiec',
-            current_affiliation: 'Instytut Botaniki im. W. Szafera PAN',
-            field: 'Botanika',
-          },
-        ];
-
-        // 🟢 передаём в navigate как state
-        navigate('/grant-sector-2', { state: { scientists: specialScientists } });
-        return;
-      }
-
-      const nameToOrcid: Record<string, string> = {
-        'jadwiga ziaja': '0000-0002-3562-4812',
-        'grzegorz worobiec': '0000-0002-2916-9905',
-      };
-
-      const matched = Object.keys(nameToOrcid).find((n) => lower.includes(n));
-      if (matched) {
-        const orcid = nameToOrcid[matched];
+  try {
+    // --- Obsługa "wróć"
+    const returnPhrases = [
+      'wróć',
+      'wróć do poprzedniego profilu',
+      'wróć do jadwigi ziaji',
+      'wróć do jadwiga ziaja',
+      'wroć',
+    ];
+    if (returnPhrases.some((phrase) => lower.includes(phrase))) {
+      if (history.length > 0) {
+        const lastOrcid = history[history.length - 1];
+        setHistory((prev) => prev.slice(0, -1));
         setMessages((prev) => [
           ...prev,
-          {
-            from: 'system',
-            text: `📄 Otwieram profil badacza: ${matched
-              .split(' ')
-              .map((w) => w[0].toUpperCase() + w.slice(1))
-              .join(' ')}`,
-          },
+          { from: 'system', text: '📄 Wracam do poprzedniego profilu...' },
         ]);
-        navigate(`/profile/${orcid}`); // <-- изменено: используем orcid напрямую
-        return;
-      }
-
-      const res = await axios.post('/api/v1/chat/send', { message: trimmed });
-      const { response: botText, view_type, ids } = res.data;
-      setMessages((prev) => [...prev, { from: 'system', text: botText }]);
-
-      if (view_type === 'profile' && ids?.length === 1) {
-        const orcidId = convertIdToOrcid(ids[0]); // <-- изменено: конвертация
-        navigate(`/profile/${orcidId}`);
-        setFilteredIDs([ids[0]]);
-        fetchFilteredScientists([ids[0]]);
-      } else if (view_type === 'list-researchers' && ids?.length) {
-        setFilteredIDs(ids);
-        fetchFilteredScientists(ids);
+        navigate(`/profile/${lastOrcid}`);
       } else {
-        setFilteredIDs(null);
-        fetchScientists(page);
+        setMessages((prev) => [
+          ...prev,
+          { from: 'system', text: '❌ Brak poprzedniego profilu w historii.' },
+        ]);
       }
-    } catch (err) {
-      console.error(err);
+      setLoading(false);
+      return;
+    }
+
+    // --- Obsługa specjalnych instytutów
+    if (lower === 'pokaż naukowców z instytutu botaniki im. w. szafera pan') {
+  const userMsg = {
+    from: 'user',
+    text: trimmed,
+  };
+  const listMsg = {
+    from: 'system',
+    text: '🔁 Przekierowuję do listy naukowców z Instytutu Botaniki...',
+  };
+
+  setMessages((prev) => [...prev, userMsg, listMsg]);
+
+  const specialScientists = [
+    {
+      id: '88025787-92b6-4d68-bbf4-588a7c076644',
+      orcid_id: '0000-0002-3562-4812',
+      full_name: 'Jadwiga Ziaja',
+      current_affiliation: 'Instytut Botaniki im. W. Szafera PAN',
+      field: 'Botanika',
+    },
+    {
+      id: 'df145a3f-4be4-4b59-a783-bd0bc5044d42',
+      orcid_id: '0000-0002-2916-9905',
+      full_name: 'Grzegorz Worobiec',
+      current_affiliation: 'Instytut Botaniki im. W. Szafera PAN',
+      field: 'Botanika',
+    },
+  ];
+
+  // Передаём состояние с учётом страницы и списка
+  navigate('/grant-sector-2', {
+    state: {
+      scientists: specialScientists,
+      page: 2, // можно использовать или заменить в компоненте назначения
+      originalMessage: trimmed, // если нужно отобразить запрос в чате на целевой странице
+    },
+  });
+
+  return;
+}
+
+
+    // --- Obsługa konkretnych imion
+    const nameToOrcid: Record<string, string> = {
+      'jadwiga ziaja': '0000-0002-3562-4812',
+      'grzegorz worobiec': '0000-0002-2916-9905',
+    };
+
+    const matched = Object.keys(nameToOrcid).find((n) => lower.includes(n));
+    if (matched) {
+      const orcid = nameToOrcid[matched];
+
+      // --- Dodaj do historii tylko jeśli jesteśmy na stronie profilu
+      const currentPath = window.location.pathname;
+      const match = currentPath.match(/^\/profile\/(.{19})$/);
+      if (match) {
+        const currentOrcid = match[1];
+        if (currentOrcid !== orcid) {
+          setHistory((prev) => [...prev, currentOrcid]);
+        }
+      }
+
       setMessages((prev) => [
         ...prev,
-        { from: 'system', text: 'Wystąpił błąd podczas komunikacji z API.' },
+        {
+          from: 'system',
+          text: `📄 Otwieram profil badacza: ${matched
+            .split(' ')
+            .map((w) => w[0].toUpperCase() + w.slice(1))
+            .join(' ')}`,
+        },
       ]);
-    } finally {
-      setLoading(false);
+      navigate(`/profile/${orcid}`);
+      return;
     }
-  };
+
+    // --- Domyślne zapytanie do API
+    const res = await axios.post('/api/v1/chat/send', { message: trimmed });
+    const { response: botText, view_type, ids } = res.data;
+    setMessages((prev) => [...prev, { from: 'system', text: botText }]);
+
+    if (view_type === 'profile' && ids?.length === 1) {
+      const orcidId = convertIdToOrcid(ids[0]);
+
+      // --- Dodaj do historii jeśli jesteśmy na profilu i переход другой
+      const currentPath = window.location.pathname;
+      const match = currentPath.match(/^\/profile\/(.{19})$/);
+      if (match) {
+        const currentOrcid = match[1];
+        if (currentOrcid !== orcidId) {
+          setHistory((prev) => [...prev, currentOrcid]);
+        }
+      }
+
+      navigate(`/profile/${orcidId}`);
+      setFilteredIDs([ids[0]]);
+      fetchFilteredScientists([ids[0]]);
+    } else if (view_type === 'list-researchers' && ids?.length) {
+      setFilteredIDs(ids);
+      fetchFilteredScientists(ids);
+    } else {
+      setFilteredIDs(null);
+      fetchScientists(page);
+    }
+  } catch (err) {
+    console.error(err);
+    setMessages((prev) => [
+      ...prev,
+      { from: 'system', text: 'Wystąpił błąd podczas komunikacji z API.' },
+    ]);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const getCountryName = (code: string) =>
     countryCodes[code] || code || 'Nieznany kraj';
 
   return (
-    <div className="min-h-screen max-w-7xl mx-auto p-3 bg-white font-mono text-gray-900 flex">
+    <div className="h-screen max-w-7xl mx-auto p-3 bg-white font-mono text-gray-900 flex">
       <aside className="w-1/3 bg-gray-50 p-3 rounded-lg flex flex-col">
         <h2 className="text-lg font-semibold mb-3">Czat</h2>
         <div className="flex-grow overflow-y-auto mb-3 space-y-2 border border-gray-300 rounded p-3 text-sm">
@@ -291,9 +358,9 @@ const ResearcherProfile = () => {
         </div>
       </aside>
 
-      <main className="w-2/3 flex flex-row gap-6">
-        <section className="flex-1 overflow-y-auto max-h-screen flex flex-col">
-          <div className="mb-4">
+      <main className="w-2/3 flex flex-row gap-6 h-full">
+        <section className="flex-1 flex flex-col overflow-y-auto max-h-full">
+          <div className="mb-4 flex-shrink-0">
             <label className="font-bold text-sm mb-1 block">ORCID</label>
             <input
               type="text"
@@ -306,23 +373,24 @@ const ResearcherProfile = () => {
 
           <button
             onClick={() => fetchResearcherData()}
-            className="mb-4 bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+            className="mb-4 bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 flex-shrink-0"
           >
             Pobierz dane
           </button>
 
-          {error && <p className="text-red-600">{error}</p>}
+          {error && <p className="text-red-600 flex-shrink-0">{error}</p>}
 
-          <h1 className="text-2xl font-bold mb-4">
+          <h1 className="text-2xl font-bold mb-4 flex-shrink-0">
             {researcher
               ? `prof. hab. ${researcher.first_name} ${researcher.last_name}`
               : 'Brak danych'}
           </h1>
 
-          <div className="mb-6 space-y-2 text-sm">
+          <div className="mb-6 space-y-2 text-sm flex-shrink-0">
             <p>🏫 {researcher?.current_affiliation || 'Brak danych'}</p>
             <p>💻 {researcher?.field || 'Brak danych'}</p>
-            <p>🌍 {getCountryName(researcher?.country || '')}</p>
+            <p>🌍 Polska</p>
+
             {researcher && (
               <a
                 href={`https://orcid.org/${researcher.orcid_id}`}
@@ -336,8 +404,8 @@ const ResearcherProfile = () => {
           </div>
         </section>
 
-        <section className="w-1/3 flex flex-col gap-6">
-          <div className="bg-gray-50 p-3 rounded-lg">
+        <section className="w-1/2 flex flex-col gap-6 overflow-y-auto max-h-full">
+          <div className="bg-gray-50 p-3 rounded-lg flex-shrink-0">
             <h2 className="font-bold text-lg mb-2">Kontakt</h2>
             <p className="text-sm">
               📧 {contactData?.email || 'Brak danych'}
@@ -346,7 +414,7 @@ const ResearcherProfile = () => {
             </p>
           </div>
 
-          <div>
+          <div className="overflow-y-auto flex-grow">
             <h2 className="font-bold text-lg mb-2">Publikacje</h2>
             {publications.length ? (
               <ul className="space-y-2 text-sm">
