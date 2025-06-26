@@ -6,13 +6,13 @@ const questions = [
   {
     id: 1,
     icon: '🎓',
-    text: 'Znajdź naukowca po numerze orcid lub imieniu i nazwisku',
+    text: 'Znajdź naukowca po numerze orcid',
     link: '/profile/0',
   },
   {
     id: 2,
     icon: '⚙️',
-    text: 'Pokaż naukowców związane z informatyką"',
+    text: 'Pokaż naukowców z Polski!"',
     link: '/grant-sector-2',
   },
   {
