@@ -134,15 +134,18 @@ const ResearcherProfile = () => {
     }
   };
 
-  const fetchResearcherPublications = async (id: string) => {
-    try {
-      const res = await axios.get(`/api/v1/researchers/publications/${id}`);
-      setPublications(res.data.results || []);
-    } catch (err) {
-      console.error(err);
-      setPublications([]);
-    }
-  };
+const fetchResearcherPublications = async (id: string) => {
+  try {
+    const res = await axios.get(`/api/v1/researchers/publications/${id}`);
+    console.log(res.data); // Проверьте: есть ли `count`, `next`, `previous`
+    setPublications(res.data.results || []);
+  } catch (err) {
+    console.error(err);
+    setPublications([]);
+  }
+};
+
+
 
   const fetchFilteredScientists = async (ids: string[]) => {
     try {
@@ -349,12 +352,16 @@ const ResearcherProfile = () => {
             placeholder="Napisz wiadomość..."
           />
           <button
-            onClick={sendMessage}
-            disabled={loading}
-            className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
-          >
-            Wyślij
-          </button>
+  onClick={sendMessage}
+  disabled={loading}
+  className="bg-black rounded-full p-2 hover:opacity-80 disabled:opacity-50"
+>
+  <svg width="24" height="24" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="36" width="36" height="36" rx="18" transform="rotate(90 36 0)" fill="black"/>
+    <path d="M13.9403 18.3959H16.0634V23.4355C16.0634 24.6114 16.6887 24.8494 17.4514 23.9674L22.6527 17.948C23.2918 17.213 23.0238 16.6041 22.055 16.6041H19.9318V11.5645C19.9318 10.3886 19.3065 10.1506 18.5439 11.0326L13.3425 17.052C12.7103 17.794 12.9783 18.3959 13.9403 18.3959Z" stroke="white" strokeMiterlimit="10" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+</button>
+
         </div>
       </aside>
 

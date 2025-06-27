@@ -150,7 +150,7 @@ const LandingPage = () => {
 
       {/* Футер */}
       <footer className="text-center text-xs text-gray-400 mt-8">
-        Copyright Angora © {new Date().getFullYear()}
+        Copyright Agora © {new Date().getFullYear()}
       </footer>
     </div>
   );
