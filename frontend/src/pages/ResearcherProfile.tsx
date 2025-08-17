@@ -214,7 +214,7 @@ const fetchResearcherPublications = async (id: string) => {
     text: '🔁 Przekierowuję do listy naukowców z Instytutu Botaniki...',
   };
 
-  setMessages((prev) => [...prev, userMsg, listMsg]);
+  setMessages((prev) => [...prev, {from: 'user',text: trimmed}, {from: 'system',text: '🔁 Przekierowuję do listy naukowców z Instytutu Botaniki...'}]);
 
   const specialScientists = [
     {

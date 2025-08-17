@@ -1,22 +1,29 @@
-import sys, os
+import sys, os, time
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 import sqlite3
 import pandas as pd
 from pathlib import Path
 
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Table, DateTime, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Table, DateTime, Boolean, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.exc import  IntegrityError
 
-#tworzenie bazy danych z relacjami
+import uuid
+from datetime import datetime
+
+import requests,json
+#z jsona z 47k naukowców wybiera 10k tych, którzy mają filtr Country: PL i dodaje do bazy po 1k
+
+BATCH_SIZE = 1000
 
 Base = declarative_base()
 
 class Researcher(Base):
     __tablename__ = 'Researchers'
     id = Column(String, primary_key=True)
-    orcid_id = Column(String)
+    orcid_id = Column(String, unique=True)
     first_name = Column(String)
     last_name = Column(String)
     full_name = Column(String)
@@ -33,6 +40,8 @@ class Researcher(Base):
     emails = relationship('Email', back_populates='researcher', cascade="all, delete-orphan")
     affiliations = relationship('Affiliation', back_populates='researcher', cascade="all, delete-orphan")
     publication_authors= relationship('PublicationAuthor', back_populates='researcher',cascade="all, delete-orphan")
+
+    __table_args__ = (UniqueConstraint("orcid_id", name="key_orcid_id"),)
 
 
 class Affiliation(Base):
@@ -122,8 +131,8 @@ base_dir = Path(__file__).parent.resolve()
 db_path = (base_dir.parent /"app"/ "database"/ "scientists.db").resolve()
 print(f"Using DB path: {db_path}")
 if db_path.exists():
-    print("Database already exists. Skipping creation.")
-    sys.exit(0)
+    print("Database already exists.")
+    #sys.exit(0)
 else:
     print("No existing database found. Creating new one.")
 print(f"Resolved DB path in container: {db_path}")
@@ -167,17 +176,6 @@ df_publication_author = pd.DataFrame(columns=[
     "id", "publication_id", "researcher_id",
     "author_order", "is_corresponding"
 ])
-'''
-Database = {
-    "Researcher": df_researcher,
-    "Sources": df_sources,
-    "Education": df_education,
-    "Affilations": df_affiliations,
-    "Keywords": df_keywords,
-    "Publiations": df_publication,
-    "Publications_authors": df_publication_author
-}'''
-
 
 
 
@@ -328,9 +326,6 @@ def parse_orcid_json(orcid_id: str, orcid_json: dict, employment_json: dict, edu
     }
 
 
-#parser publikacji
-
-
 def parse_orcid_works(works_json: dict, researcher_id: str):
     now = datetime.utcnow().isoformat()
     publications = []
@@ -463,77 +458,42 @@ def collect_data(orcid_id: str) -> None:
     parsed = parse_orcid_json(orcid_id, person, employment, education)
     
     if not parsed or not parsed.get("researcher"):
+        print(f"Nie znaleziono researchera: {orcid_id}")
         return  # Нет данных, ничего не делаем
     
     country = parsed["researcher"].get("country")
     if country is None:
+        print(f"Nie ma kraju researchera: {orcid_id}")
         return  # Нет страны — пропускаем
     
     country_lower = country.lower()
     if country_lower not in ["pl", "poland"]:
+        print(f"Kraj nie Polska: {orcid_id}")
         return  # Не Польша — пропускаем
 
     parsed_publications = parse_orcid_works(publications, parsed["researcher"]["id"])
     insert_data(parsed, parsed_publications)
 
 
+def open_orcid_ids():
+  with open("orcid_IDs.json","r") as f:
+    return json.load(f)
+  
+def process_banch(start_index):
+  all_ids = open_orcid_ids()
+  batch = all_ids[start_index:start_index + BATCH_SIZE]
 
-def get_orcid_ids_by_query(query: str, count: int = 100):
-    headers = {"Accept": "application/json"}
-    rows = []
-    start = 0
-    while len(rows) < count:
-        url = f"https://pub.orcid.org/v3.0/expanded-search/?q={query}&start={start}&rows=100"
-        r = requests.get(url, headers=headers)
-        data = r.json()
-        results = data.get("expanded-result", [])
-        if not results:
-            break
-        rows.extend([res["orcid-id"] for res in results])
-        start += 100
-    return rows[:count]
+  for i,id in enumerate(batch):
+    print(f"{i} / {len(batch)}: ", id)
+    if i % 3 == 0:
+      time.sleep(2)
+    collect_data(id)
 
-def get_orcid_ids_poland(count=100):
-    # Формируем запрос с фильтром по тексту "Poland"
-    query = "text:Poland"
-    return get_orcid_ids_by_query(query, count=count)
+ 
+process_banch(start_index=40000) #0-999, 1000-1999, jeśli start_index 40000, oznacza że przeszukuje jsona od pozycji 40000 do 41000. Naukowców z Country:PL dodaje do bazy backend/app/database/scientists.db
 
-
-topics = [                                                              
-    "artificial intelligence",
-    "machine learning"
-    "climate change",
-    "bioinformatics"
-    "neuroscience",
-    "robotics",
-    "mathematics",
-    "economics",
-    "social sciences",
-    "history",
-    "cultural studies",
-    "energy systems",
-    "quantum computing",
-    "materials science",
-    "public health"
-]
-
-def collect_diverse_orcid_ids(topics, per_topic=10): #per_topic=70_res
-    all_ids = set()
-    for topic in topics:
-        ids = get_orcid_ids_by_query(topic.replace(" ", "+"), count=per_topic)
-        all_ids.update(ids)
-    return list(all_ids)
-
-#my_list = collect_diverse_orcid_ids(topics)
-my_list = get_orcid_ids_poland(count=50)
-
-
-
-for id, scientist in enumerate(my_list):
-    print(f"{id} / {len(my_list)}: ", scientist)
-    #if id % 3 == 0:
-        #time.sleep(12)
-    collect_data(scientist)
+Session = sessionmaker(bind=engine)
+session=Session()
 
 new_researcher_df = df_researcher[["id","orcid_id","first_name","last_name","full_name","country","primary_affiliation","created_at","updated_at"]].merge(
     df_education[["researcher_id","degree","field"]],
@@ -542,8 +502,7 @@ new_researcher_df = df_researcher[["id","orcid_id","first_name","last_name","ful
     how='outer')
 new_researcher_df = new_researcher_df.drop(columns=['researcher_id'])
 
-new_researcher_df = new_researcher_df.drop_duplicates(subset='id',keep='first') ##
-# usuwanie duplikatów UNIQUE research id -> zrobić new table education z degree i field
+new_researcher_df = new_researcher_df.drop_duplicates(subset='id',keep='first') 
 
 new_publication_df = df_publication[["id","title","journal","doi","year","source","project_id"]]
 new_publication_author_df= df_publication_author[["id","publication_id","researcher_id","author_order","is_corresponding"]]
@@ -560,14 +519,6 @@ for i in range(len(df_researcher["id"])):
                     
 
 new_emails_df = pd.DataFrame(new_emails_df)
-
-
-#print(new_researcher_df2)
-
-#wypełnianie bazy danych
-
-Session = sessionmaker(bind=engine)
-session = Session()
 
 
 for _, row in new_researcher_df.iterrows():
@@ -650,40 +601,9 @@ for _, row in new_emails_df.iterrows():
 
     session.add(emails)
 
-
-
-# Zapisz zmiany
 try:
     session.commit()
     print("Dane dodane do bazy")
 except Exception as e:
     session.rollback()
     print("Błąd podczas dodawania danych:", e)
-
-
-
-'''
-for name, table in Database.items():
-    print(table)
-    table.to_sql(name, conn, if_exists="replace", index=False)
-    print(f"Zapisano tabelę {name} do bazy danych.")
-    print("---------------\n")
-
-print("KEYWORDS")
-print(df_keywords)
-#wrzucania danych
-
-cursor = conn.cursor()
-
-# List all tables
-cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-print(cursor.fetchall())
-
-cursor.execute("SELECT * FROM Researcher LIMIT 5;")
-for row in cursor.fetchall():
-    print(row)
-
-cursor.execute("SELECT COUNT(*) FROM Researcher;")
-print("Rows in Researcher:", cursor.fetchone()[0])
-conn.commit()
-'''
