@@ -5,3 +5,4 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /backend/app/database/scientists.db
+**/scientists.db
